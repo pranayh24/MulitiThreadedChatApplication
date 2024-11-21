@@ -1,4 +1,4 @@
-package org.prh;
+package org.prh.client;
 
 import java.io.BufferedReader;
 import java.io.IOException;

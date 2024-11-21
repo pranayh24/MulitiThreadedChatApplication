@@ -1,4 +1,9 @@
-package org.prh;
+package org.prh.server;
+
+import org.prh.client.ClientHandler;
+import org.prh.utils.Constants;
+import org.prh.utils.LoggerUtil;
+import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -8,16 +13,17 @@ import java.util.*;
 public class ChatServer {
 
     // Stores all active client handlers (threads)
-    private static Map<String,ClientHandler> clientHandlers = new HashMap<>();
+    private static Map<String, ClientHandler> clientHandlers = new HashMap<>();
     private static Map<String,List<ClientHandler>> groupHandlers = new HashMap<>();
     private static final int PORT = 8188;
+    public static final Logger logger = LoggerUtil.getLogger(ChatServer.class);
 
     // Stores the last 20 messages
     private static List<String> messageHistory = new ArrayList<>();
     private static final int HISTORY_LIMIT = 20;
 
     public static void main(String[] args){
-        System.out.println("Chat Server started...");
+        logger.info(Constants.SERVER_START_MSG,PORT);
 
         // Start the server socket
         try(ServerSocket serverSocket = new ServerSocket(PORT)) {
@@ -27,8 +33,6 @@ public class ChatServer {
 
                 // Create a new ClientHandler for each connected client
                 ClientHandler clientHandler = new ClientHandler(clientSocket);
-
-
 
                 // Start the new client's thread
                 new Thread(clientHandler).start();
@@ -49,15 +53,14 @@ public class ChatServer {
         messageHistory.add(message);
 
         for(ClientHandler clientHandler:clientHandlers.values()){
-            // Do not send the message back to the sender
-            if(clientHandler.getGroupName()==null ){
-                clientHandler.sendMessage(message);
-            }
+            // send the message to all the clients
+            clientHandler.sendMessage("[Public] "+message);
+
         }
     }
 
     // Method to send the message history to  a newly connected client
-    public static synchronized  void sendHistory(ClientHandler clientHandler){
+    public static synchronized  void sendPublicHistory(ClientHandler clientHandler){
         for(String message: messageHistory){
             clientHandler.sendMessage("[History] "+message);
         }
@@ -108,6 +111,7 @@ public class ChatServer {
         else{
             groupHandlers.put(groupName,new ArrayList<>());
             groupHandlers.get(groupName).add(creater);
+            creater.addGroup(groupName);
             creater.sendMessage("Group "+groupName+" created.");
         }
     }
@@ -116,7 +120,7 @@ public class ChatServer {
     public static synchronized void joinGroup(String groupName, ClientHandler clientHandler){
         if(groupHandlers.containsKey(groupName)){
             groupHandlers.get(groupName).add(clientHandler);
-            clientHandler.setGroupName(groupName);
+            clientHandler.addGroup(groupName);
             broadcastGroupMessage(groupName,clientHandler.getUsername()+" joined the group.");
         }
         else{
@@ -128,7 +132,7 @@ public class ChatServer {
     public static synchronized  void leaveGroup(String groupName, ClientHandler clientHandler){
         if(groupHandlers.containsKey(groupName)){
             groupHandlers.get(groupName).remove(clientHandler);
-            clientHandler.setGroupName(null);
+            clientHandler.removeGroup(groupName);
             broadcastGroupMessage(groupName,clientHandler.getUsername()+" left the group.");
         }
         else{
@@ -141,7 +145,7 @@ public class ChatServer {
         List<ClientHandler> groupMembers = groupHandlers.get(groupName);
         if(groupMembers!=null){
             for(ClientHandler clientHandler:groupMembers){
-                clientHandler.sendMessage(message);
+                clientHandler.sendMessage(groupName+": " +message);
             }
         }
     }

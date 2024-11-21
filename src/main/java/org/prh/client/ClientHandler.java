@@ -1,10 +1,14 @@
-package org.prh;
+package org.prh.client;
+
+import org.prh.server.ChatServer;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.util.HashSet;
+import java.util.Set;
 
 // ClientHandler class to handle each client in a separate thread
 public class ClientHandler implements Runnable{
@@ -12,7 +16,7 @@ public class ClientHandler implements Runnable{
     private PrintWriter out;
     private BufferedReader in;
     private String username;
-    private String groupName=null;
+    private Set<String> groups = new HashSet<>();
 
     public ClientHandler(Socket socket){
         try {
@@ -38,7 +42,8 @@ public class ClientHandler implements Runnable{
 
             ChatServer.broadcastMessage(username+" has joined the chat",this);
 
-            ChatServer.sendHistory(this);
+            ChatServer.sendPublicHistory(this);
+
             // Read and process messages sent by the client
             String message;
             while((message = in.readLine())!=null){
@@ -76,23 +81,40 @@ public class ClientHandler implements Runnable{
                     }
                 }
                 else if(message.startsWith("/leavegroup")){
-                    if(groupName!=null){
-                        ChatServer.leaveGroup(groupName,this);
+                    String[] splitMessage = message.split(" ",2);
+                    if(splitMessage.length==2){
+                        ChatServer.leaveGroup(splitMessage[1],this);
                     }
                     else{
-                        out.println("You are not part of any group.");
+                        out.println("Invalid group leave format. Use: /leavegroup <groupname>");
                     }
                 }
                 else if(message.startsWith("/groups")){
                     out.println(ChatServer.listActiveGroups());
                 }
-                else {
-                    if(groupName!=null){
-                        ChatServer.broadcastGroupMessage(groupName,username+": "+message);
+                else if(message.startsWith("group")){
+                    // Group Messaging
+                    String[] splitMessage = message.split(" ",3);
+                    if(splitMessage.length>=3){
+                        String groupName = splitMessage[1];
+                        String groupMessage = splitMessage[2];
+                        if(groups.contains(groupName)){
+                            ChatServer.broadcastGroupMessage(groupName,username+": "+groupMessage);
+                        }
+                        else{
+                            out.println("You are not part of the group: "+groupName);
+                        }
                     }
-                    else {
-                        ChatServer.broadcastMessage(username + ": " + message, this); //Broadcast message to other clients
+                    else{
+                        out.println("Invalid group message format. Use: group <groupname> <message>");
                     }
+                }
+                else if(message.startsWith("/public")){
+                    String publicMessage = message.substring(8);
+                    ChatServer.broadcastMessage(username + ": " + publicMessage, this); //Broadcast message to other clients
+                }
+                else{
+                    out.println("Invalid command. Use /pm, /public, /creategroup, /joingroup, /leavegroup, /groups, /group.");
                 }
             }
         }
@@ -116,14 +138,13 @@ public class ClientHandler implements Runnable{
     // Method to send a message to this client
     public void sendMessage(String message){
         out.println(message);
-        out.flush();
     }
 
-    public void setGroupName(String groupName){
-         this.groupName=groupName;
+    public void addGroup(String groupName){
+         groups.add(groupName);
     }
-    public String getGroupName(){
-        return groupName;
+    public void removeGroup(String groupName){
+        groups.remove(groupName);
     }
     // Getter for username
     public String getUsername(){
